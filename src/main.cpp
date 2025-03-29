@@ -48,7 +48,7 @@ int main()
     }
 
     glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
-    glClearColor(0.25f, 0.25f, 0.25f, 1.0f);
+    glClearColor(135.0f/255.0f, 206.0f/255.0f, 235.0f/255.0f, 1.0f);
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
@@ -88,8 +88,8 @@ int main()
 	camera.vertical_fov = 45.0f;
 	camera.aspect_ratio = static_cast<float>(WINDOW_WIDTH) / static_cast<float>(WINDOW_HEIGHT);
 	camera.near_plane = 0.001f;
-	camera.far_plane = 1000.0f;
-    camera.movement_speed = 5.0f;
+	camera.far_plane = 100.0f;
+    camera.movement_speed = 15.0f;
 	camera.update_projection_matrix();
     glfwSetWindowUserPointer(window, &camera);
 
@@ -97,12 +97,13 @@ int main()
     shader.use();
 
     Mesh mesh{};
-    if (!mesh.load_mesh("monkey.glb")) {
+    if (!mesh.load_mesh("ship.glb")) {
         throw std::runtime_error("Failed to load mesh.\n");
     }
     auto model_matrix = glm::mat4(1.0f);
     //model_matrix = glm::translate(model_matrix, glm::vec3(0.0f, 2.0f, 0.0f));
-    //model_matrix = glm::scale(model_matrix, glm::vec3(0.05f));
+    model_matrix = glm::scale(model_matrix, glm::vec3(0.0025f));
+    model_matrix *= glm::rotate(-glm::half_pi<float>(), glm::vec3(1.0f, 0.0f, 0.0f));
 
     float deltatime{ 0.0f };
     float last_frame{ 0.0f };
@@ -157,6 +158,9 @@ int main()
 void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 {
     glViewport(0, 0, width, height);
+    Camera* camera = static_cast<Camera*>(glfwGetWindowUserPointer(window));
+    camera->aspect_ratio = static_cast<float>(WINDOW_WIDTH) / static_cast<float>(WINDOW_HEIGHT);
+    camera->update_projection_matrix();
 }
 
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)

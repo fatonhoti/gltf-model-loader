@@ -17,13 +17,13 @@ public:
     void render();
 
 private:
-    GLuint EBO;
-    std::vector<GLushort> indices;
 
-    GLuint VAO, VBO_pos, VBO_norm, VBO_tc;
-    std::vector<glm::vec3> positions;
-    std::vector<glm::vec3> normals;
-    std::vector<glm::vec2> texCoords;
+    struct MeshEntry {
+        GLuint VAO, VBO_pos, VBO_norm, VBO_tc, EBO;
+        uint32_t offset = 0;
+        uint32_t count = 0;
+    };
+    std::vector<MeshEntry> meshes{};
 
     void unload_mesh();
 };

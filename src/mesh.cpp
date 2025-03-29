@@ -8,6 +8,18 @@
 #include <filesystem>
 #include <assert.h>
 
+static const auto to_glm_vec3 = [](const float* data, const size_t size, std::vector<glm::vec3>& out) -> void {
+    out.reserve(size);
+    for (size_t i = 0; i < size * 3; i += 3)
+        out.emplace_back(data[i + 0], data[i + 1], data[i + 2]);
+};
+
+static const auto to_glm_vec2 = [](const float* data, const size_t size, std::vector<glm::vec2>& out) -> void {
+    out.reserve(size);
+    for (size_t i = 0; i < size * 3; i += 2)
+        out.emplace_back(data[i + 0], data[i + 1]);
+};
+
 Mesh::Mesh()
 {
 }
@@ -19,7 +31,7 @@ Mesh::~Mesh()
 
 bool Mesh::load_mesh(const char *filename)
 {
-    if (VAO != 0)
+    if (!meshes.empty())
         unload_mesh();
 
     auto path_model = std::filesystem::current_path() / "assets" / "models" / filename;
@@ -57,13 +69,35 @@ bool Mesh::load_mesh(const char *filename)
             out.emplace_back(data[i + 0], data[i + 1]);
     };
 
-    printf("Number of meshes: %zu\n", model.meshes.size());
-    for (const auto& mesh : model.meshes) {
-        printf("Mesh name: %s\n", mesh.name.c_str());
-        printf("\tNumber of primitives: %zu\n", mesh.primitives.size());
-        for (const auto& primitive : mesh.primitives) {
-            assert(primitive.mode == TINYGLTF_MODE_TRIANGLES && "Only supporting standard triangle meshes (not STRIP nor FAN).\n");
+    std::vector<glm::vec3> positions{};
+    std::vector<glm::vec3> normals{};
+    std::vector<glm::vec2> texCoords{};
 
+    uint32_t nof_indices = 0;
+    for (const auto& mesh : model.meshes) {
+        for (const auto& primitive : mesh.primitives) {
+            const auto& acc_ind = model.accessors[primitive.indices];
+            nof_indices += acc_ind.count;
+        }
+    }
+    printf("Found %d indices\n", nof_indices);
+
+    std::vector<uint32_t> indices{};
+    indices.reserve(nof_indices);
+
+    meshes.resize(model.meshes.size());
+
+    for (size_t i = 0; i < model.meshes.size(); i++) {
+        const auto& mesh = model.meshes[i];
+
+        std::vector<glm::vec3> positions;
+        std::vector<glm::vec3> normals;
+        std::vector<glm::vec2> texCoords;
+        std::vector<uint32_t> indices;
+
+        uint32_t index_offset = 0;
+
+        for (const auto& primitive : mesh.primitives) {
             if (primitive.attributes.find("POSITION") != primitive.attributes.end()) {
                 const auto& acc_pos = model.accessors[primitive.attributes.at("POSITION")];
                 const auto& bv_pos = model.bufferViews[acc_pos.bufferView];
@@ -79,7 +113,7 @@ bool Mesh::load_mesh(const char *filename)
                 const float* data_norm = reinterpret_cast<const float*>(&buffer.data[bv_norm.byteOffset + acc_norm.byteOffset]);
                 to_glm_vec3(data_norm, acc_norm.count, normals);
             }
-            
+
             if (primitive.attributes.find("TEXCOORD_0") != primitive.attributes.end()) {
                 const auto& acc_tc = model.accessors[primitive.attributes.at("TEXCOORD_0")];
                 const auto& bv_tc = model.bufferViews[acc_tc.bufferView];
@@ -87,103 +121,90 @@ bool Mesh::load_mesh(const char *filename)
                 const float* data_tc = reinterpret_cast<const float*>(&buffer.data[bv_tc.byteOffset + acc_tc.byteOffset]);
                 to_glm_vec2(data_tc, acc_tc.count, texCoords);
             }
-            
-            assert(primitive.indices != -1 && "This mesh primitive is missing indices.");
-            
-            const auto& acc_ind = model.accessors[primitive.indices];
-            const auto& bv_ind = model.bufferViews[acc_ind.bufferView];
-            const auto& buffer = model.buffers[bv_ind.buffer];
-            indices.resize(acc_ind.count);
-            
-            switch(acc_ind.componentType) {
-                /*
-                const GLubyte* data_ind;
-                case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
-                    data_ind = reinterpret_cast<const GLubyte*>(&buffer.data[bv_ind.byteOffset + acc_ind.byteOffset]);
-                    std::memcpy(indices.data(), data_ind, acc_ind.count * sizeof(GLubyte));
-                    break;
-                */
-                case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
-                    const GLushort* data_ind;
-                    data_ind = reinterpret_cast<const GLushort*>(&buffer.data[bv_ind.byteOffset + acc_ind.byteOffset]);
-                    std::memcpy(indices.data(), data_ind, acc_ind.count * sizeof(GLushort));
-                    break;
-                /*
-                case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
-                    const GLuint* data_ind;
-                    data_ind = reinterpret_cast<const GLuint*>(&buffer.data[bv_ind.byteOffset + acc_ind.byteOffset]);
-                    std::memcpy(indices.data(), data_ind, acc_ind.count * sizeof(GLuint));
-                    break;
-                */
-                default:
-                    printf("Unsupported index component type %d\n", acc_ind.componentType);
-                    unload_mesh();
-                    return false;
+
+            // Handling indices correctly
+            if (primitive.indices >= 0) {
+                const auto& acc_ind = model.accessors[primitive.indices];
+                const auto& bv_ind = model.bufferViews[acc_ind.bufferView];
+                const auto& buffer = model.buffers[bv_ind.buffer];
+
+                switch(acc_ind.componentType) {
+                    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
+                        indices.insert(indices.end(),
+                            reinterpret_cast<const GLubyte*>(&buffer.data[bv_ind.byteOffset + acc_ind.byteOffset]),
+                            reinterpret_cast<const GLubyte*>(&buffer.data[bv_ind.byteOffset + acc_ind.byteOffset]) + acc_ind.count);
+                        break;
+                    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
+                        indices.insert(indices.end(),
+                            reinterpret_cast<const GLushort*>(&buffer.data[bv_ind.byteOffset + acc_ind.byteOffset]),
+                            reinterpret_cast<const GLushort*>(&buffer.data[bv_ind.byteOffset + acc_ind.byteOffset]) + acc_ind.count);
+                        break;
+                    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
+                        indices.insert(indices.end(),
+                            reinterpret_cast<const GLuint*>(&buffer.data[bv_ind.byteOffset + acc_ind.byteOffset]),
+                            reinterpret_cast<const GLuint*>(&buffer.data[bv_ind.byteOffset + acc_ind.byteOffset]) + acc_ind.count);
+                        break;
+                    default:
+                        printf("Unsupported index component type %d\n", acc_ind.componentType);
+                        return false;
+                }
             }
         }
+
+        meshes[i].offset = index_offset;
+        meshes[i].count = indices.size();
+        index_offset += indices.size();
+
+        glGenVertexArrays(1, &meshes[i].VAO);
+        glBindVertexArray(meshes[i].VAO);
+
+        glGenBuffers(1, &meshes[i].VBO_pos);
+        glBindBuffer(GL_ARRAY_BUFFER, meshes[i].VBO_pos);
+        glBufferData(GL_ARRAY_BUFFER, positions.size() * sizeof(glm::vec3), positions.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(POSITION_LOCATION);
+        glVertexAttribPointer(POSITION_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+        if (!normals.empty()) {
+            glGenBuffers(1, &meshes[i].VBO_norm);
+            glBindBuffer(GL_ARRAY_BUFFER, meshes[i].VBO_norm);
+            glBufferData(GL_ARRAY_BUFFER, normals.size() * sizeof(glm::vec3), normals.data(), GL_STATIC_DRAW);
+            glEnableVertexAttribArray(NORMAL_LOCATION);
+            glVertexAttribPointer(NORMAL_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
+        }
+
+        if (!texCoords.empty()) {
+            glGenBuffers(1, &meshes[i].VBO_tc);
+            glBindBuffer(GL_ARRAY_BUFFER, meshes[i].VBO_tc);
+            glBufferData(GL_ARRAY_BUFFER, texCoords.size() * sizeof(glm::vec2), texCoords.data(), GL_STATIC_DRAW);
+            glEnableVertexAttribArray(TEX_COORD_LOCATION);
+            glVertexAttribPointer(TEX_COORD_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
+        }
+
+        glGenBuffers(1, &meshes[i].EBO);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, meshes[i].EBO);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(uint32_t), indices.data(), GL_STATIC_DRAW);
+
+        glBindVertexArray(0);
     }
 
-    printf("positions.size() = %zu\n", positions.size());
-    printf("normals.size() = %zu\n", normals.size());
-    printf("texCoords.size() = %zu\n", texCoords.size());
-    printf("indices.size() = %zu\n", indices.size());
-
-    glGenVertexArrays(1, &VAO);
-    glBindVertexArray(VAO);
-    
-    glGenBuffers(1, &VBO_pos);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO_pos);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * positions.size(), positions.data(), GL_STATIC_DRAW);
-    glEnableVertexAttribArray(POSITION_LOCATION);
-    glVertexAttribPointer(POSITION_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    
-    if (!normals.empty()) {
-        glGenBuffers(1, &VBO_norm);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO_norm);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * normals.size(), normals.data(), GL_STATIC_DRAW);
-        glEnableVertexAttribArray(NORMAL_LOCATION);
-        glVertexAttribPointer(NORMAL_LOCATION, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    }
-    
-    if (!texCoords.empty()) {
-        glGenBuffers(1, &VBO_tc);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO_tc);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec2) * texCoords.size(), texCoords.data(), GL_STATIC_DRAW);
-        glEnableVertexAttribArray(TEX_COORD_LOCATION);
-        glVertexAttribPointer(TEX_COORD_LOCATION, 2, GL_FLOAT, GL_FALSE, 0, 0);
-    }
-
-    glGenBuffers(1, &EBO);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLushort) * indices.size(), indices.data(), GL_STATIC_DRAW);
-
-    glBindVertexArray(0);
     return true;
 }
 
 void Mesh::render()
 {
-    glBindVertexArray(VAO);
-    glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_SHORT, 0);
+    for (const auto& mesh : meshes) {
+        glBindVertexArray(mesh.VAO);
+        glDrawElements(GL_TRIANGLES, mesh.count, GL_UNSIGNED_INT, (void*)(mesh.offset * sizeof(uint32_t)));
+    }
 }
 
 void Mesh::unload_mesh()
 {
-    if (VAO != 0) glDeleteVertexArrays(1, &VAO);
-    if (VBO_pos != 0) glDeleteBuffers(1, &VBO_pos);
-    if (VBO_norm != 0) glDeleteBuffers(1, &VBO_norm);
-    if (VBO_tc != 0) glDeleteBuffers(1, &VBO_tc);
-    if (EBO != 0) glDeleteBuffers(1, &EBO);
-
-    indices.clear();
-    indices.shrink_to_fit();
-
-    positions.clear();
-    positions.shrink_to_fit();
-
-    normals.clear();
-    normals.shrink_to_fit();
-
-    texCoords.clear();
-    texCoords.shrink_to_fit();
+    for (const auto& mesh : meshes) {
+        if (mesh.VAO != 0) glDeleteVertexArrays(1, &mesh.VAO);
+        if (mesh.VBO_pos != 0) glDeleteBuffers(1, &mesh.VBO_pos);
+        if (mesh.VBO_norm != 0) glDeleteBuffers(1, &mesh.VBO_norm);
+        if (mesh.VBO_tc != 0) glDeleteBuffers(1, &mesh.VBO_tc);
+        if (mesh.EBO != 0) glDeleteBuffers(1, &mesh.EBO);
+    }
 }
