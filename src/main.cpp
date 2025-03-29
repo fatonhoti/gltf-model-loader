@@ -12,8 +12,8 @@
 #include "mesh.hpp"
 
 GLFWwindow* window;
-constexpr int WINDOW_WIDTH = 800;
-constexpr int WINDOW_HEIGHT = 600;
+constexpr int WINDOW_WIDTH = 1280;
+constexpr int WINDOW_HEIGHT = 1024;
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
@@ -88,7 +88,7 @@ int main()
 	camera.vertical_fov = 45.0f;
 	camera.aspect_ratio = static_cast<float>(WINDOW_WIDTH) / static_cast<float>(WINDOW_HEIGHT);
 	camera.near_plane = 0.001f;
-	camera.far_plane = 100.0f;
+	camera.far_plane = 150.0f;
     camera.movement_speed = 15.0f;
 	camera.update_projection_matrix();
     glfwSetWindowUserPointer(window, &camera);
@@ -96,6 +96,18 @@ int main()
     GraphicsShader shader("default.vert", "default.frag");
     shader.use();
 
+    Mesh old_ship{};
+    old_ship.load_mesh("ship_x_sail_opaque.glb");
+    auto old_ship_mm = glm::mat4(1.0f);
+    old_ship_mm = glm::translate(old_ship_mm, glm::vec3(0.0f, 22.5f, -7.0f));
+    old_ship_mm = glm::scale(old_ship_mm, glm::vec3(10.0f));
+    old_ship_mm *= glm::rotate(-glm::half_pi<float>(), glm::vec3(1.0f, 0.0f, 0.0f));
+
+    Mesh jack{};
+    jack.load_mesh("jack_sparrow.glb");
+    auto jack_mm = glm::mat4(1.0f);
+
+    /*
     Mesh mesh{};
     if (!mesh.load_mesh("ship.glb")) {
         throw std::runtime_error("Failed to load mesh.\n");
@@ -104,6 +116,7 @@ int main()
     //model_matrix = glm::translate(model_matrix, glm::vec3(0.0f, 2.0f, 0.0f));
     model_matrix = glm::scale(model_matrix, glm::vec3(0.0025f));
     model_matrix *= glm::rotate(-glm::half_pi<float>(), glm::vec3(1.0f, 0.0f, 0.0f));
+    */
 
     float deltatime{ 0.0f };
     float last_frame{ 0.0f };
@@ -118,17 +131,20 @@ int main()
         const auto PV = P * V;
 
         shader.set_mat4("u_PV", PV);
-        shader.set_mat4("u_ModelMatrix", model_matrix);
         shader.set_vec3("u_CameraPosition", camera.origin);
         
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         shader.use();
 
+        shader.set_mat4("u_ModelMatrix", old_ship_mm);
+        old_ship.render();
+
+        shader.set_mat4("u_ModelMatrix", jack_mm);
+        jack.render();
+
         // render test triangle
         //glBindVertexArray(VAO);
         //glDrawArrays(GL_TRIANGLES, 0, 3);
-
-        mesh.render();
         
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
             camera.move(FORWARD, deltatime);
@@ -159,7 +175,7 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 {
     glViewport(0, 0, width, height);
     Camera* camera = static_cast<Camera*>(glfwGetWindowUserPointer(window));
-    camera->aspect_ratio = static_cast<float>(WINDOW_WIDTH) / static_cast<float>(WINDOW_HEIGHT);
+    camera->aspect_ratio = static_cast<float>(width) / static_cast<float>(height);
     camera->update_projection_matrix();
 }
 
