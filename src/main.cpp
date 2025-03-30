@@ -42,10 +42,48 @@ int main()
     GraphicsShader shader("default.vert", "default.frag");
     shader.use();
 
-    if (!AssetManager::load_model("mazda_rx-7.glb", AssetManager::FILE_FORMAT::GLB)) {
+    //if (!AssetManager::load_model("mazda_rx-7.glb", AssetManager::FILE_FORMAT::GLB)) {
+    //if (!AssetManager::load_model("lamborghini_diablo_sv.glb", AssetManager::FILE_FORMAT::GLB)) {
+    //if (!AssetManager::load_model("sponza.glb", AssetManager::FILE_FORMAT::GLB)) {
+    //if (!AssetManager::load_model("ship_x_sail_opaque.glb", AssetManager::FILE_FORMAT::GLB)) {
+    if (!AssetManager::load_model("2006_apr_lancer_evolution_ix_gsr_tokyo_drift.glb", AssetManager::FILE_FORMAT::GLB)) {
         printf("Failed to load model :(\n");
         return EXIT_FAILURE;
     }
+
+    /*
+    for (auto& [_, model] : AssetManager::models){
+        for (auto& mesh : model.meshes) {
+            mesh.model_matrix = glm::scale(glm::mat4(1.0f), glm::vec3(100.0f)) * mesh.model_matrix;
+        }
+    }
+    */
+
+    /*
+    printf("nof_mats = %zu\n", AssetManager::materials.size());
+    for (const auto& [_, model] : AssetManager::models) {
+        printf("nof_meshes = %zu\n", model.meshes.size());
+        for (const auto& mesh : model.meshes) {
+            printf("mat_idx = %d\n", mesh.mat_idx);
+            if (mesh.mat_idx != -1) {
+                const auto& mat = AssetManager::materials[mesh.mat_idx];
+
+                if (mat.base_color_texture_idx != -1) {
+                    const auto& tex = AssetManager::textures[mat.base_color_texture_idx];
+                    printf("baseColorTexture ID = %d\n", tex.ID);
+                }
+                if (mat.metallic_roughness_texture_idx != -1) {
+                    const auto& tex = AssetManager::textures[mat.metallic_roughness_texture_idx];
+                    printf("metallicRoughnessTexture ID = %d\n", tex.ID);
+                }
+                printf("base_color = (%.2f, %.2f, %.2f, %.2f)\n", 
+                    mat.base_color.r, mat.base_color.g, mat.base_color.b, mat.base_color.a);
+                printf("metalness = %f\n", mat.metalness);
+                printf("roughness = %f\n", mat.roughness);
+            }
+        }
+    }
+    */
 
     float deltatime{ 0.0f };
     float last_frame{ 0.0f };
@@ -68,8 +106,44 @@ int main()
         for (const auto& [_, model] : AssetManager::models) {
             for (const auto& mesh : model.meshes) {
                 shader.set_mat4("u_ModelMatrix", mesh.model_matrix);
+
+                if (mesh.mat_idx != -1) {
+                    const auto& mat = AssetManager::materials[mesh.mat_idx];
+                    if (mat.base_color_texture_idx != -1) {
+                        const auto& tex = AssetManager::textures[mat.base_color_texture_idx];
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_2D, tex.ID);
+                        shader.set_int("baseColorTexture", 0);
+                        shader.set_int("hasBaseColorTexture", 1);
+                    } else {
+                        shader.set_int("hasBaseColorTexture", 0);
+                    }
+                    if (mat.metallic_roughness_texture_idx != -1) {
+                        const auto& tex = AssetManager::textures[mat.metallic_roughness_texture_idx];
+                        glActiveTexture(GL_TEXTURE1);
+                        glBindTexture(GL_TEXTURE_2D, tex.ID);
+                        shader.set_int("metallicRoughnessTexture", 1);
+                        shader.set_int("hasMetallicRoughnessTexture", 1);
+                    } else {
+                        shader.set_int("hasMetallicRoughnessTexture", 0);
+                    }
+
+                    shader.set_vec4("mat.base_color", mat.base_color);
+                    shader.set_float("mat.metalness", mat.metalness);
+                    shader.set_float("mat.roughness", mat.roughness);
+
+                    if (mat.double_sided) {
+                        glDisable(GL_CULL_FACE);
+                    }
+
+                }
+
                 glBindVertexArray(mesh.VAO);
                 glDrawElements(GL_TRIANGLES, mesh.count, GL_UNSIGNED_INT, (void*)(mesh.offset * sizeof(uint32_t)));
+
+                if (mesh.mat_idx != -1 && AssetManager::materials[mesh.mat_idx].double_sided) {
+                    glEnable(GL_CULL_FACE);
+                }
             }
         }
 

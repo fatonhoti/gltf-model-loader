@@ -2,12 +2,18 @@
 
 #include "glad.h"
 
+#include "glm/gtc/quaternion.hpp"
+#include "glm/gtc/matrix_transform.hpp"
+#include "glm/gtx/transform.hpp"
+
 #include <assert.h>
 #include <stack>
 
 namespace AssetManager {
 
-    std::unordered_map<std::string, Model> models;
+    std::unordered_map<std::string, Model> models{};
+    std::vector<Material> materials{};
+    std::vector<Texture> textures{};
 
     bool load_model(const std::string name, const FILE_FORMAT format)
     {
@@ -47,6 +53,11 @@ namespace AssetManager {
 
         if (!load_glb_meshes(models[name], model)) {
             printf("Failed to load model meshes.\n");
+            return false;
+        }
+
+        if (!load_glb_materials(models[name], model)) {
+            printf("Failed to load model materials.\n");
             return false;
         }
 
@@ -191,6 +202,94 @@ namespace AssetManager {
         return true;
     }
 
+    bool load_glb_materials(Model &mo, const tinygltf::Model &model)
+    {
+        int32_t mat_idx = 0;
+        for (size_t i = 0; i < model.meshes.size(); i++) {
+            const auto& mesh = model.meshes[i];
+
+            assert(mesh.primitives.size() == 1 && "mesh.primitives is > 1.");
+            for (const auto& primitive : mesh.primitives) {
+                const auto& mat = model.materials[primitive.material];
+                const auto& pbrMR = mat.pbrMetallicRoughness;
+
+                Material m{};
+                if (mat.alphaMode == "OPAQUE") {
+                    m.mode = Material::AlphaMode::OPAQUE;
+                } else if (mat.alphaMode == "MASK") {
+                    m.mode = Material::AlphaMode::MASK;
+                    m.alpha_cutoff = mat.alphaCutoff;
+                } else if (mat.alphaMode == "BLEND") {
+                    m.mode = Material::AlphaMode::BLEND;
+                }
+
+                m.double_sided = mat.doubleSided;
+
+                m.base_color.r = pbrMR.baseColorFactor[0];
+                m.base_color.g = pbrMR.baseColorFactor[1];
+                m.base_color.b = pbrMR.baseColorFactor[2];
+                m.base_color.a = pbrMR.baseColorFactor[3];
+
+                m.metalness = pbrMR.metallicFactor;
+                m.roughness = pbrMR.roughnessFactor;
+
+                static auto load_texture = [&](
+                    const tinygltf::Image& img,
+                    const tinygltf::Sampler& sampler
+                ) -> bool {
+                    Texture::TextureConfig tc{
+                        .target = GL_TEXTURE_2D,
+                        .min_filter = sampler.minFilter,
+                        .mag_filter = sampler.magFilter,
+                        .wrap_s = sampler.wrapS,
+                        .wrap_t = sampler.wrapT,
+                        .internalformat = img.component,
+                        .format = img.bits,
+                        .type = img.pixel_type,
+                        .width = img.width,
+                        .height = img.height,
+                    };
+                    Texture t{};
+                    if (!t.create_texture(tc, img.image.data())) {
+                        return false;
+                    }
+                    textures.push_back(t);
+                    return true;
+                };
+
+                if (pbrMR.baseColorTexture.index != -1) {
+                    const auto& baseColorTexture = model.textures[pbrMR.baseColorTexture.index];
+                    const auto& baseColorTextureImage = model.images[baseColorTexture.source];
+                    const auto& baseColorTextureSampler = model.samplers[baseColorTexture.sampler];
+                    if (!load_texture(baseColorTextureImage, baseColorTextureSampler)) {
+                        printf("Failed to load baseColorTexture, skipping.\n");
+                    }
+                    m.base_color_texture_idx = textures.size() - 1;
+                }
+
+                if (pbrMR.metallicRoughnessTexture.index != -1) {
+                    const auto& metallicRoughnessTexture = model.textures[pbrMR.metallicRoughnessTexture.index];
+                    const auto& metallicRoughnessTextureImage = model.images[metallicRoughnessTexture.source];
+                    const auto& metallicRoughnessTextureSampler = model.samplers[metallicRoughnessTexture.sampler];
+                    if (!load_texture(metallicRoughnessTextureImage, metallicRoughnessTextureSampler)) {
+                        printf("Failed to load metallicRoughnessTexture, skipping.\n");
+                    }
+                    m.metallic_roughness_texture_idx = textures.size() - 1;
+                }
+
+                // TODO: normal texture
+
+                // TODO: emissiveness texture
+
+                materials.push_back(m);
+                mo.meshes[i].mat_idx = mat_idx;
+                mat_idx++;
+            }
+        }
+
+        return true;
+    }
+
     bool load_glb_transformations(Model& m, const tinygltf::Model &model)
     {
         assert(model.scenes.size() == 1 && "Found several scenes. Only supporting single scene.");
@@ -219,10 +318,12 @@ namespace AssetManager {
             // process children
             for (const auto& child_idx : parent.node.children) {
                 const auto& child_node = model.nodes[child_idx];
-                const auto& child_matrix = vec_to_glm_mat4x4(child_node.matrix);
+                const auto& child_matrix = get_node_transform(child_node);
                 stk.push(StkEntry{
                     .node = model.nodes[child_idx],
+//                    .model_matrix = child_matrix * parent.model_matrix
                     .model_matrix = parent.model_matrix * child_matrix
+
                 });
             }
         }
@@ -243,6 +344,28 @@ namespace AssetManager {
             }
         }
         return res;
+    }
+
+    glm::mat4 get_node_transform(const tinygltf::Node& node) {
+        glm::mat4 transform = glm::mat4(1.0f);
+    
+        if (!node.matrix.empty()) {
+            transform = vec_to_glm_mat4x4(node.matrix);
+        } else {
+            // Apply TRS transformation
+            glm::mat4 translation = glm::translate(glm::mat4(1.0f), 
+                                                   node.translation.size() == 3 ? glm::vec3(node.translation[0], node.translation[1], node.translation[2]) : glm::vec3(0.0f));
+    
+            glm::quat rotation = node.rotation.size() == 4 ? glm::quat(node.rotation[3], node.rotation[0], node.rotation[1], node.rotation[2]) : glm::quat(1, 0, 0, 0);
+            glm::mat4 rotMatrix = glm::mat4_cast(rotation);
+    
+            glm::mat4 scale = glm::scale(glm::mat4(1.0f), 
+                                         node.scale.size() == 3 ? glm::vec3(node.scale[0], node.scale[1], node.scale[2]) : glm::vec3(1.0f));
+    
+            transform = translation * rotMatrix * scale;
+        }
+    
+        return transform;
     }
 
 }; // end namespace 'AssetManager'
