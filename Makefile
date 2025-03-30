@@ -1,6 +1,6 @@
 # Compiler and flags (missing -Werror)
 CXX = g++
-CXXFLAGS = -O3 -std=c++20 -Wall -pedantic -I ./include
+CXXFLAGS = -O3 -g -std=c++20 -Wall -pedantic -I ./include
 LDFLAGS = -lglfw -lGL
 
 # source files

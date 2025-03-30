@@ -188,6 +188,7 @@ bool Mesh::load_mesh(const char *filename)
     }
 
     // Handle materials
+    /*
     for (size_t i = 0; i < model.meshes.size(); i++) {
         const auto& mesh = model.meshes[i];
         for (const auto& primitive : mesh.primitives) {
@@ -229,6 +230,23 @@ bool Mesh::load_mesh(const char *filename)
 
         }
     }
+    */
+    /*
+    const auto& scenes = model.scenes;
+    printf("nof_scenes = %zu\n", scenes.size());
+
+    printf("Scenes:\n");
+    for (const auto& scene : scenes) {
+        printf("\tname = %s\n", scene.name.c_str());
+        const auto& nodes = scene.nodes;
+        printf("\t#nodes = %zu\n", nodes.size());
+        for (const auto& node_idx : nodes) {
+            const auto& node = model.nodes[node_idx];
+            printf("\t\tname = %s\n", node.name.c_str());
+            printf("\t\tmesh = %d\n", node.mesh);
+        }
+    }
+    */
 
     return true;
 }

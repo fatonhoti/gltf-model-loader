@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <cassert>
 
+#include "asset_manager.hpp"
 #include "graphics_shader.hpp"
 #include "camera.hpp"
 #include "mesh.hpp"
@@ -21,67 +22,12 @@ void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
 void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id, GLenum severity, GLsizei length, const char *message, const void *userParam);
 
+void init_glfw_glad();
+void render_test_triangle();
+
 int main()
 {
-    if (!glfwInit())
-        throw std::runtime_error("Failed to initialize GLFW");
-
-    window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "glTF-viewer", nullptr, nullptr);
-    if (!window)
-    {
-        glfwTerminate();
-        throw std::runtime_error("Failed to create window");
-    }
-
-    glfwMakeContextCurrent(window);
-    glfwSetKeyCallback(window, key_callback);
-    glfwSetCursorPosCallback(window, mouse_callback);
-	glfwSetMouseButtonCallback(window, mouse_button_callback);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    //glfwSwapInterval(1);
-
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-    {
-        glfwDestroyWindow(window);
-        glfwTerminate();
-        throw std::runtime_error("Failed to initialize GLAD.\n");
-    }
-
-    glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
-    glClearColor(135.0f/255.0f, 206.0f/255.0f, 235.0f/255.0f, 1.0f);
-
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
-
-    glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
-    glEnable(GL_DEBUG_OUTPUT);
-    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-    glDebugMessageCallback(glDebugOutput, nullptr);
-    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-
-    glEnable(GL_CULL_FACE);
-    glFrontFace(GL_CCW);
-    glCullFace(GL_BACK);
-
-    // test triangle
-    GLfloat vertices[] = {
-        -0.5f, -0.5f, 0.0f, // left
-         0.5f, -0.5f, 0.0f, // right
-         0.0f,  0.5f, 0.0f  // top
-    }; 
-    GLuint VBO, VAO;
-    glGenVertexArrays(1, &VAO);
-    glBindVertexArray(VAO);
-    glGenBuffers(1, &VBO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void*)0);
-    glEnableVertexAttribArray(0);
-    glBindVertexArray(0);
+    init_glfw_glad();
 
     Camera camera{};
     camera.origin = { 0.0f, 0.0f, 5.0f };
@@ -96,36 +42,10 @@ int main()
     GraphicsShader shader("default.vert", "default.frag");
     shader.use();
 
-    //Mesh old_ship{};
-    //old_ship.load_mesh("ship_x_sail_opaque.glb");
-    //auto old_ship_mm = glm::mat4(1.0f);
-    //old_ship_mm = glm::translate(old_ship_mm, glm::vec3(0.0f, 22.5f, -7.0f));
-    //old_ship_mm = glm::scale(old_ship_mm, glm::vec3(10.0f));
-    //old_ship_mm *= glm::rotate(-glm::half_pi<float>(), glm::vec3(1.0f, 0.0f, 0.0f));
-
-    //Mesh jack{};
-    //jack.load_mesh("jack_sparrow.glb");
-    //auto jack_mm = glm::mat4(1.0f);
-
-    Mesh mazda{};
-    mazda.load_mesh("mazda_rx-7.glb");
-    auto mazda_mm = glm::mat4(1.0f);
-
-    //Mesh sponza{};
-    //sponza.load_mesh("sponza.glb");
-    //auto sponza_mm = glm::mat4(1.0f);
-    //sponza_mm = glm::scale(sponza_mm, glm::vec3(0.05));
-
-    /*
-    Mesh mesh{};
-    if (!mesh.load_mesh("ship.glb")) {
-        throw std::runtime_error("Failed to load mesh.\n");
+    if (!AssetManager::load_model("mazda_rx-7.glb", AssetManager::FILE_FORMAT::GLB)) {
+        printf("Failed to load model :(\n");
+        return EXIT_FAILURE;
     }
-    auto model_matrix = glm::mat4(1.0f);
-    //model_matrix = glm::translate(model_matrix, glm::vec3(0.0f, 2.0f, 0.0f));
-    model_matrix = glm::scale(model_matrix, glm::vec3(0.0025f));
-    model_matrix *= glm::rotate(-glm::half_pi<float>(), glm::vec3(1.0f, 0.0f, 0.0f));
-    */
 
     float deltatime{ 0.0f };
     float last_frame{ 0.0f };
@@ -143,23 +63,17 @@ int main()
         shader.set_vec3("u_CameraPosition", camera.origin);
         
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
         shader.use();
+        for (const auto& [_, model] : AssetManager::models) {
+            for (const auto& mesh : model.meshes) {
+                shader.set_mat4("u_ModelMatrix", mesh.model_matrix);
+                glBindVertexArray(mesh.VAO);
+                glDrawElements(GL_TRIANGLES, mesh.count, GL_UNSIGNED_INT, (void*)(mesh.offset * sizeof(uint32_t)));
+            }
+        }
 
-        //shader.set_mat4("u_ModelMatrix", old_ship_mm);
-        //old_ship.render();
-
-        //shader.set_mat4("u_ModelMatrix", jack_mm);
-        //jack.render();
-
-        shader.set_mat4("u_ModelMatrix", mazda_mm);
-        mazda.render();
-
-        //shader.set_mat4("u_ModelMatrix", sponza_mm);
-        //sponza.render();
-
-        // render test triangle
-        //glBindVertexArray(VAO);
-        //glDrawArrays(GL_TRIANGLES, 0, 3);
+        //render_test_triangle(shader);
         
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
             camera.move(FORWARD, deltatime);
@@ -308,4 +222,75 @@ void APIENTRY glDebugOutput(GLenum source,
     }
     std::cout << "\n";
     std::cout << std::endl;
+}
+
+void init_glfw_glad()
+{
+    if (!glfwInit())
+        throw std::runtime_error("Failed to initialize GLFW");
+
+    window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "glTF-viewer", nullptr, nullptr);
+    if (!window)
+    {
+        glfwTerminate();
+        throw std::runtime_error("Failed to create window");
+    }
+
+    glfwMakeContextCurrent(window);
+    glfwSetKeyCallback(window, key_callback);
+    glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetMouseButtonCallback(window, mouse_button_callback);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    //glfwSwapInterval(1);
+
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+    {
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        throw std::runtime_error("Failed to initialize GLAD.\n");
+    }
+
+    glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+    glClearColor(135.0f/255.0f, 206.0f/255.0f, 235.0f/255.0f, 1.0f);
+
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
+
+    glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
+    glEnable(GL_DEBUG_OUTPUT);
+    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+    glDebugMessageCallback(glDebugOutput, nullptr);
+    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+
+    glEnable(GL_CULL_FACE);
+    glFrontFace(GL_CCW);
+    glCullFace(GL_BACK);
+}
+
+void render_test_triangle(const Shader& shader)
+{
+    static GLuint VBO, VAO;
+    if (VAO == 0) {
+        // test triangle
+        GLfloat vertices[] = {
+            -0.5f, -0.5f, 0.0f, // left
+             0.5f, -0.5f, 0.0f, // right
+             0.0f,  0.5f, 0.0f  // top
+        }; 
+        glGenVertexArrays(1, &VAO);
+        glBindVertexArray(VAO);
+        glGenBuffers(1, &VBO);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void*)0);
+        glEnableVertexAttribArray(0);
+        glBindVertexArray(0);
+    }
+    shader.use();
+    glBindVertexArray(VAO);   
+    glDrawArrays(GL_TRIANGLES, 0, 3);
 }
