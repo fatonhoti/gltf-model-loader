@@ -69,9 +69,9 @@ int main()
 
     // test triangle
     GLfloat vertices[] = {
-        -0.5f, -0.5f, 0.0f, // left  
-         0.5f, -0.5f, 0.0f, // right 
-         0.0f,  0.5f, 0.0f  // top   
+        -0.5f, -0.5f, 0.0f, // left
+         0.5f, -0.5f, 0.0f, // right
+         0.0f,  0.5f, 0.0f  // top
     }; 
     GLuint VBO, VAO;
     glGenVertexArrays(1, &VAO);
@@ -96,16 +96,25 @@ int main()
     GraphicsShader shader("default.vert", "default.frag");
     shader.use();
 
-    Mesh old_ship{};
-    old_ship.load_mesh("ship_x_sail_opaque.glb");
-    auto old_ship_mm = glm::mat4(1.0f);
-    old_ship_mm = glm::translate(old_ship_mm, glm::vec3(0.0f, 22.5f, -7.0f));
-    old_ship_mm = glm::scale(old_ship_mm, glm::vec3(10.0f));
-    old_ship_mm *= glm::rotate(-glm::half_pi<float>(), glm::vec3(1.0f, 0.0f, 0.0f));
+    //Mesh old_ship{};
+    //old_ship.load_mesh("ship_x_sail_opaque.glb");
+    //auto old_ship_mm = glm::mat4(1.0f);
+    //old_ship_mm = glm::translate(old_ship_mm, glm::vec3(0.0f, 22.5f, -7.0f));
+    //old_ship_mm = glm::scale(old_ship_mm, glm::vec3(10.0f));
+    //old_ship_mm *= glm::rotate(-glm::half_pi<float>(), glm::vec3(1.0f, 0.0f, 0.0f));
 
-    Mesh jack{};
-    jack.load_mesh("jack_sparrow.glb");
-    auto jack_mm = glm::mat4(1.0f);
+    //Mesh jack{};
+    //jack.load_mesh("jack_sparrow.glb");
+    //auto jack_mm = glm::mat4(1.0f);
+
+    Mesh mazda{};
+    mazda.load_mesh("mazda_rx-7.glb");
+    auto mazda_mm = glm::mat4(1.0f);
+
+    //Mesh sponza{};
+    //sponza.load_mesh("sponza.glb");
+    //auto sponza_mm = glm::mat4(1.0f);
+    //sponza_mm = glm::scale(sponza_mm, glm::vec3(0.05));
 
     /*
     Mesh mesh{};
@@ -136,11 +145,17 @@ int main()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         shader.use();
 
-        shader.set_mat4("u_ModelMatrix", old_ship_mm);
-        old_ship.render();
+        //shader.set_mat4("u_ModelMatrix", old_ship_mm);
+        //old_ship.render();
 
-        shader.set_mat4("u_ModelMatrix", jack_mm);
-        jack.render();
+        //shader.set_mat4("u_ModelMatrix", jack_mm);
+        //jack.render();
+
+        shader.set_mat4("u_ModelMatrix", mazda_mm);
+        mazda.render();
+
+        //shader.set_mat4("u_ModelMatrix", sponza_mm);
+        //sponza.render();
 
         // render test triangle
         //glBindVertexArray(VAO);

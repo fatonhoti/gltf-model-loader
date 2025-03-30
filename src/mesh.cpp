@@ -187,6 +187,49 @@ bool Mesh::load_mesh(const char *filename)
         glBindVertexArray(0);
     }
 
+    // Handle materials
+    for (size_t i = 0; i < model.meshes.size(); i++) {
+        const auto& mesh = model.meshes[i];
+        for (const auto& primitive : mesh.primitives) {
+            printf("\n@@@\n");
+            printf("material = %d\n", primitive.material);
+            const auto& mat = model.materials[primitive.material];
+
+            printf("mat.name = %s\n", mat.name.c_str());
+            
+            const auto& pbrMR = mat.pbrMetallicRoughness;
+            printf("metallicFactor = %f\n", pbrMR.metallicFactor);
+            printf("roughnessFactor = %f\n", pbrMR.roughnessFactor);
+            
+            printf("baseColorTexture:\n");
+            printf("\tbaseColorTexture.index = %d\n", pbrMR.baseColorTexture.index);
+            printf("\tbaseColorTexture.texCoord = %d\n", pbrMR.baseColorTexture.texCoord);
+            const auto& baseColorTexture = model.textures[pbrMR.baseColorTexture.index];
+            printf("baseColorTexture.name = %s\n", baseColorTexture.name.c_str());
+            const auto& baseColorTextureImage = model.images[baseColorTexture.source];
+            printf("\timage.uri = %s\n", baseColorTextureImage.uri.c_str());
+            const auto& baseColorTextureSampler = model.samplers[baseColorTexture.sampler];
+            printf("\t\tmagFilter = %d\n", baseColorTextureSampler.magFilter);
+            printf("\t\tmagFilter = %d\n", baseColorTextureSampler.magFilter);
+            printf("\t\twrapS = %d\n", baseColorTextureSampler.wrapS);
+            printf("\t\twrapT = %d\n", baseColorTextureSampler.wrapT);
+
+            printf("metallicRoughnessTexture:\n");
+            printf("\tmetallicRoughnessTexture.index = %d\n", pbrMR.metallicRoughnessTexture.index);
+            printf("\tmetallicRoughnessTexture.texCoord = %d\n", pbrMR.metallicRoughnessTexture.texCoord);
+            const auto& metallicRoughnessTexture = model.textures[pbrMR.metallicRoughnessTexture.index];
+            printf("metallicRoughnessTexture.name = %s\n", metallicRoughnessTexture.name.c_str());
+            const auto& metallicRoughnessTextureImage = model.images[metallicRoughnessTexture.source];
+            printf("\timage.uri = %s\n", metallicRoughnessTextureImage.uri.c_str());
+            const auto& metallicRoughnessTextureSampler = model.samplers[metallicRoughnessTexture.sampler];
+            printf("\t\tmagFilter = %d\n", metallicRoughnessTextureSampler.magFilter);
+            printf("\t\tmagFilter = %d\n", metallicRoughnessTextureSampler.magFilter);
+            printf("\t\twrapS = %d\n", metallicRoughnessTextureSampler.wrapS);
+            printf("\t\twrapT = %d\n", metallicRoughnessTextureSampler.wrapT);
+
+        }
+    }
+
     return true;
 }
 
